@@ -19,7 +19,7 @@ class PageController extends Controller {
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[OpenAPI(OpenAPI::SCOPE_IGNORE)]
-	#[FrontpageRoute(verb: 'GET', url: '/')]
+	#[FrontpageRoute(verb: 'GET', url: '/all')]
 	public function index(): TemplateResponse {
 		return new TemplateResponse(
 			Application::APP_ID,

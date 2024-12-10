@@ -1,6 +1,14 @@
-import Vue from 'vue'
-import ExportExcelApp from './ExportExcelApp.vue'
-Vue.mixin({ methods: { t, n } })
+import Vue from 'vue';
+import ExportExcelApp from './views/ExportExcelApp.vue';
+import router from './router';
 
-const View = Vue.extend(ExportExcelApp)
-new View().$mount('#accountexport')
+// Vue.use(router);
+Vue.mixin({ methods: { t, n } });
+
+// const View = Vue.extend(ExportExcelApp);
+// new View().$mount('#accountexport');
+
+new Vue({
+	router,
+	render: (h) => h(ExportExcelApp),
+}).$mount('#accountexport');
