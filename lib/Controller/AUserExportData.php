@@ -6,8 +6,10 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+
 namespace OCA\AccountExport\Controller;
 
+use DateTimeZone;
 use OC\Group\Manager as GroupManager;
 use OC\User\Backend;
 use OC\User\NoUserException;
@@ -29,12 +31,14 @@ use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use OCP\User\Backend\ISetDisplayNameBackend;
 use OCP\User\Backend\ISetPasswordBackend;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
  * @psalm-import-type Provisioning_APIUserDetails from ResponseDefinitions
  * @psalm-import-type Provisioning_APIUserDetailsQuota from ResponseDefinitions
  */
-abstract class AUserExportData extends OCSController {
+abstract class AUserExportData extends OCSController
+{
 	public const SCOPE_SUFFIX = 'Scope';
 
 	public const USER_FIELD_DISPLAYNAME = 'display';
@@ -70,7 +74,8 @@ abstract class AUserExportData extends OCSController {
 	 * @throws OCSException
 	 * @throws OCSNotFoundException
 	 */
-	protected function getUserData(string $userId, bool $includeScopes = false): ?array {
+	protected function getUserData(string $userId, bool $includeScopes = false): ?array
+	{
 		$currentLoggedInUser = $this->userSession->getUser();
 		assert($currentLoggedInUser !== null, 'No user logged in');
 
@@ -84,9 +89,11 @@ abstract class AUserExportData extends OCSController {
 
 		$isAdmin = $this->groupManager->isAdmin($currentLoggedInUser->getUID());
 		$isDelegatedAdmin = $this->groupManager->isDelegatedAdmin($currentLoggedInUser->getUID());
-		if ($isAdmin
+		if (
+			$isAdmin
 			|| $isDelegatedAdmin
-			|| $this->groupManager->getSubAdmin()->isUserAccessible($currentLoggedInUser, $targetUserObject)) {
+			|| $this->groupManager->getSubAdmin()->isUserAccessible($currentLoggedInUser, $targetUserObject)
+		) {
 			$data['enabled'] = $this->config->getUserValue($targetUserObject->getUID(), 'core', 'enabled', 'true') === 'true';
 		} else {
 			// Check they are looking up themselves
@@ -152,18 +159,20 @@ abstract class AUserExportData extends OCSController {
 				$data[IAccountManager::PROPERTY_DISPLAYNAME . self::SCOPE_SUFFIX] = $userAccount->getProperty(IAccountManager::PROPERTY_DISPLAYNAME)->getScope();
 			}
 
-			foreach ([
-				IAccountManager::PROPERTY_PHONE,
-				IAccountManager::PROPERTY_ADDRESS,
-				IAccountManager::PROPERTY_WEBSITE,
-				IAccountManager::PROPERTY_TWITTER,
-				IAccountManager::PROPERTY_FEDIVERSE,
-				IAccountManager::PROPERTY_ORGANISATION,
-				IAccountManager::PROPERTY_ROLE,
-				IAccountManager::PROPERTY_HEADLINE,
-				IAccountManager::PROPERTY_BIOGRAPHY,
-				IAccountManager::PROPERTY_PROFILE_ENABLED,
-			] as $propertyName) {
+			foreach (
+				[
+					IAccountManager::PROPERTY_PHONE,
+					IAccountManager::PROPERTY_ADDRESS,
+					IAccountManager::PROPERTY_WEBSITE,
+					IAccountManager::PROPERTY_TWITTER,
+					IAccountManager::PROPERTY_FEDIVERSE,
+					IAccountManager::PROPERTY_ORGANISATION,
+					IAccountManager::PROPERTY_ROLE,
+					IAccountManager::PROPERTY_HEADLINE,
+					IAccountManager::PROPERTY_BIOGRAPHY,
+					IAccountManager::PROPERTY_PROFILE_ENABLED,
+				] as $propertyName
+			) {
 				$property = $userAccount->getProperty($propertyName);
 				$data[$propertyName] = $property->getValue();
 				if ($includeScopes) {
@@ -192,7 +201,8 @@ abstract class AUserExportData extends OCSController {
 	/**
 	 * @return string[]
 	 */
-	protected function getManagers(IUser $user): array {
+	protected function getManagers(IUser $user): array
+	{
 		$currentLoggedInUser = $this->userSession->getUser();
 
 		$managerUids = $user->getManagerUids();
@@ -224,7 +234,8 @@ abstract class AUserExportData extends OCSController {
 	 * @return string[]
 	 * @throws OCSException
 	 */
-	protected function getUserSubAdminGroupsData(string $userId): array {
+	protected function getUserSubAdminGroupsData(string $userId): array
+	{
 		$user = $this->userManager->get($userId);
 		// Check if the user exists
 		if ($user === null) {
@@ -246,7 +257,8 @@ abstract class AUserExportData extends OCSController {
 	 * @return Provisioning_APIUserDetailsQuota
 	 * @throws OCSException
 	 */
-	protected function fillStorageInfo(string $userId): array {
+	protected function fillStorageInfo(string $userId): array
+	{
 		try {
 			\OC_Util::tearDownFS();
 			\OC_Util::setupFS($userId);
@@ -286,5 +298,114 @@ abstract class AUserExportData extends OCSController {
 			return [];
 		}
 		return $data;
+	}
+
+	protected function writeRowData(Worksheet $sheet, array $userData, array $listItemDisplay, int $rowExcelIndex)
+	{
+		$timezone = new DateTimeZone('Asia/Ho_Chi_Minh');
+		foreach ($listItemDisplay as $colIndex => $columnKey) {
+			$columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
+
+			if ($columnKey == "no") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $rowExcelIndex - 1);
+			}
+
+			if ($columnKey == "displayName") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['displayname']);
+			}
+
+			if ($columnKey == "accountName") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['id']);
+			}
+
+			if ($columnKey == "password") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, "");
+			}
+
+			if ($columnKey == "email") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['email']);
+			}
+
+			if ($columnKey == "groups") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, join(", ", $userData['groups']));
+			}
+
+			if ($columnKey == "groupAdminFor") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, join(", ", $userData['subadmin']));
+			}
+
+			if ($columnKey == "quota") {
+				$used = $userData['quota']['used'] . "B";
+
+				if ($userData['quota']['quota'] == "none" || $userData['quota']['quota'] == "-3") {
+					$quota = "Unlimited";
+				} else {
+					$quota = (int)$userData['quota']['quota'] / (1024 * 1024 * 1024) . "GB";
+				}
+
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $quota . "(" . $used . ")");
+			}
+
+			if ($columnKey == "manager") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['manager']);
+			}
+
+			if ($columnKey == "language") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['language']);
+			}
+
+			if ($columnKey == "accountBackend") {
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['backend'] . "\n" . $userData['storageLocation']);
+			}
+
+			if ($columnKey == "lastLogin") {
+				if ((int)$userData['lastLogin'] > 0) {
+					$timestamp = intdiv((int)$userData['lastLogin'], 1000);
+					$datetimeFormat = 'Y-m-d H:i:s';
+					$date = new \DateTime();
+					$date->setTimezone($timezone);
+					$date->setTimestamp($timestamp);
+					$lastLogin = $date->format($datetimeFormat);
+				} else {
+					$lastLogin = "";
+				}
+				$sheet->setCellValue($columnLetter . $rowExcelIndex, $lastLogin);
+			}
+		}
+	}
+
+	protected function writeExcelHeader(Worksheet $sheet, array $listItemDisplay, array $listHeaderName)
+	{
+		foreach ($listHeaderName as $colIndex => $header) {
+			$columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
+			$sheet->setCellValue($columnLetter . "1", $header);
+			if ($listItemDisplay[$colIndex] == "email") {
+				$sheet->getColumnDimension($columnLetter)->setWidth(20);
+			}
+
+			if ($listItemDisplay[$colIndex] == "displayName") {
+				$sheet->getColumnDimension($columnLetter)->setWidth(18);
+			}
+
+			if ($listItemDisplay[$colIndex] == "accountName") {
+				$sheet->getColumnDimension($columnLetter)->setWidth(18);
+			}
+
+			if ($listItemDisplay[$colIndex] == "groupAdminFor") {
+				$sheet->getColumnDimension($columnLetter)->setWidth(15);
+			}
+
+			if ($listItemDisplay[$colIndex] == "accountBackend") {
+				$sheet->getColumnDimension($columnLetter)->setWidth(25);
+			}
+
+			if ($listItemDisplay[$colIndex] == "quota") {
+				$sheet->getColumnDimension($columnLetter)->setWidth(18);
+			}
+
+			if ($listItemDisplay[$colIndex] == "lastLogin") {
+				$sheet->getColumnDimension($columnLetter)->setWidth(18);
+			}
+		}
 	}
 }

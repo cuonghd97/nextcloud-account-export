@@ -1,130 +1,55 @@
 <template>
-	<NcAppContent>
-		<router-view></router-view>
-		<div class="section">
-			<h4>Display fields</h4>
-			<!-- <div class="grid">
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="displayName"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Display name
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="accountName"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Account name
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="password"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Password
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="email"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Email
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="groups"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Groups
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="groupAdminFor"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Group admin for
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="quota"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Quota
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="manager"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Manager
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="language"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Language
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="accountBackend"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Account backend
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					type="checkbox"
-					value="lastLogin"
-					name="displayField"
-					v-model="displayColumn"
-				>
-					Last login
-				</NcCheckboxRadioSwitch>
-			</div> -->
-			<!-- <NcSelect v-bind="selectOrigin" v-model="selectOrigin.value" />
-			<div class="download-group">
-				<NcButton aria-label="Export" @click="downloadFileExport">
-					<template #icon>
-						<NcIconSvgWrapper :path="mdiDownload" name="plus" />
-					</template>
-					<template> Export Excel </template>
-				</NcButton>
-				<NcLoadingIcon
-					v-show="isDownloading"
-					appearance="dark"
-					name="Loading on light background"
-				/>
-			</div> -->
-		</div>
+	<NcAppContent page-heading="Export Accounts">
+		<Fragment>
+			<VirtualList
+				:data-component="UserRow"
+				:data-sources="filteredUsers"
+				data-key="id"
+				data-cy-user-list
+				:item-height="rowHeight"
+				:style="style"
+				:extra-props="{
+					users,
+					languages,
+					groups,
+					subAdminsGroups,
+				}"
+				@scroll-end="handleScrollEnd"
+			>
+				<template #before>
+					<caption class="hidden-visually">
+						{{
+							'List of accounts. This list is not fully rendered for performance reasons. The accounts will be rendered as you navigate through the list.'
+						}}
+					</caption>
+				</template>
+				<template #header>
+					<UserListHeader />
+				</template>
+
+				<template #footer>
+					<UserListFooter :filtered-users="filteredUsers" />
+				</template>
+			</VirtualList>
+		</Fragment>
 	</NcAppContent>
 </template>
 <script>
-import {
-	mdiAccount,
-	mdiDownload,
-	mdiPlus
-} from '@mdi/js';
+import { mdiAccount, mdiDownload, mdiPlus, mdiAccountGroup } from '@mdi/js';
+import { showError } from '@nextcloud/dialogs';
 import NcAppContent from '@nextcloud/vue/dist/Components/NcAppContent.js';
 import NcAppNavigation from '@nextcloud/vue/dist/Components/NcAppNavigation.js';
 import NcAppNavigationItem from '@nextcloud/vue/dist/Components/NcAppNavigationItem.js';
 import NcAppNavigationList from '@nextcloud/vue/dist/Components/NcAppNavigationList.js';
-import NcButton from '@nextcloud/vue/dist/Components/NcButton.js';
-import NcCheckboxRadioSwitch from '@nextcloud/vue/dist/Components/NcCheckboxRadioSwitch.js';
-import NcIconSvgWrapper from '@nextcloud/vue/dist/Components/NcIconSvgWrapper.js';
+import NcEmptyContent from '@nextcloud/vue/dist/Components/NcEmptyContent.js';
 import NcLoadingIcon from '@nextcloud/vue/dist/Components/NcLoadingIcon.js';
-import NcSelect from '@nextcloud/vue/dist/Components/NcSelect.js';
+import NcIconSvgWrapper from '@nextcloud/vue/dist/Components/NcIconSvgWrapper.js';
+import VirtualList from './VirtualList.vue';
+import UserRow from './UserRow.vue';
+import UserListHeader from './UserListHeader.vue';
+import UserListFooter from './UserListFooter.vue';
+
+import { Fragment } from 'vue-frag';
 export default {
 	name: 'ExportExcelContent',
 	components: {
@@ -132,26 +57,141 @@ export default {
 		NcAppNavigationList,
 		NcAppNavigationItem,
 		NcAppContent,
+		Fragment,
+		NcEmptyContent,
+		NcLoadingIcon,
+		NcIconSvgWrapper,
+		VirtualList,
+		UserListHeader,
+		UserListFooter,
+	},
+	data() {
+		return {
+			loading: {
+				users: false,
+			},
+		};
 	},
 	setup() {
 		return {
 			mdiAccount,
 			mdiPlus,
 			mdiDownload,
+			mdiAccountGroup,
+			UserRow,
+			rowHeight: 55,
 		};
+	},
+	async created() {
+		await this.loadUsers();
+	},
+	computed: {
+		usersOffset() {
+			return this.$store.getters.getUsersOffset;
+		},
+
+		usersLimit() {
+			return this.$store.getters.getUsersLimit;
+		},
+		disabledUsersOffset() {
+			return this.$store.getters.getDisabledUsersOffset;
+		},
+
+		disabledUsersLimit() {
+			return this.$store.getters.getDisabledUsersLimit;
+		},
+		filteredUsers() {
+			if (this.selectedGroup === 'disabled') {
+				return this.users.filter((user) => user.enabled === false);
+			}
+			return this.users.filter((user) => user.enabled !== false);
+		},
+		users() {
+			return this.$store.getters.getUsers;
+		},
+		style() {
+			return {
+				'--row-height': `${this.rowHeight}px`,
+			};
+		},
+		settings() {
+			return this.$store.getters.getServerData;
+		},
+		selectedGroup() {
+			return this.$route.params.selectedGroup;
+		},
+		loadingUsers() {
+			return this.$store.getters.getLoadingUsers;
+		},
+		languages() {
+			return [
+				{
+					label: 'Common languages',
+					languages: this.settings.languages.commonLanguages,
+				},
+				{
+					label: 'Other languages',
+					languages: this.settings.languages.otherLanguages,
+				},
+			];
+		},
+		groups() {
+			return this.$store.getters.getGroups
+				.filter(
+					(group) =>
+						group.id !== '__nc_internal_recent' &&
+						group.id !== 'disabled'
+				)
+				.sort((a, b) => a.name.localeCompare(b.name));
+		},
+		subAdminsGroups() {
+			return this.$store.getters.getSubadminGroups;
+		},
+	},
+	methods: {
+		async loadUsers() {
+			try {
+				if (this.selectedGroup === 'disabled') {
+					await this.$store.dispatch('getDisabledUsers', {
+						offset: this.disabledUsersOffset,
+						limit: this.disabledUsersLimit,
+						search: '',
+					});
+				} else if (this.selectedGroup === '__nc_internal_recent') {
+					await this.$store.dispatch('getRecentUsers', {
+						offset: this.usersOffset,
+						limit: this.usersLimit,
+						search: '',
+					});
+				} else {
+					await this.$store.dispatch('getUsers', {
+						offset: this.usersOffset,
+						limit: this.usersLimit,
+						group: this.selectedGroup,
+						search: '',
+					});
+				}
+			} catch (error) {
+				console.error('Failed to load accounts', { error });
+				showError('Failed to load accounts');
+			}
+		},
+		async handleScrollEnd() {
+			await this.loadUsers();
+		},
+	},
+	watch: {
+		async selectedGroup(val) {
+			// this.isInitialLoad = true
+			// if selected is the disabled group but it's empty
+			this.$store.commit('resetUsers');
+			await this.loadUsers();
+			// this.setNewUserDefaultGroup(val)
+		},
 	},
 };
 </script>
 <style scoped>
-.grid {
-	display: grid;
-	gap: 12px;
-	grid-template-columns: 1fr 1fr 1fr 1fr;
-	grid-template-rows: repeat(auto-fill, auto);
-	position: relative;
-	margin: 12px 0;
-}
-
 .download-group {
 	display: flex;
 }

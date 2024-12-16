@@ -7,15 +7,22 @@ import ExportExcelContent from '../views/ExportExcelContent.vue';
 const routes = [
 	{
 		name: 'all',
-		path: '/all',
+		path: '/',
 		component: ExportExcelContent,
+		props: true,
+		children: [
+			{
+				path: ':selectedGroup',
+				name: 'group',
+			},
+		],
 	},
 ];
 
 Vue.use(VueRouter);
 
 const router = new VueRouter({
-	mode: 'history',
+	mode: 'hash',
 	routes,
 	base: generateUrl('/apps/accountexport/'),
 	linkActiveClass: 'active',

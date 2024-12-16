@@ -116,9 +116,8 @@ class GroupApiController extends AUserExportData
 		$spreadsheet = new Spreadsheet();
 		$sheet = $spreadsheet->getActiveSheet();
 
-		$highestColumn = $sheet->getHighestColumn();
 		$sheet->getStyle('A:A')->getAlignment()->setHorizontal('center');
-		$sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
+		$sheet->getStyle('A1:Z1')->getFont()->setBold(true);
 
 		$listDisplayFieldRequest = explode(",", $displayFields);
 		$listHeaders = [];
@@ -130,33 +129,8 @@ class GroupApiController extends AUserExportData
 			}
 		}
 
-		foreach ($listHeaders as $colIndex => $header) {
-			$columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
-			$sheet->setCellValue($columnLetter . "1", $header);
-			if ($listItemDisplay[$colIndex] == "email") {
-				$sheet->getColumnDimension($columnLetter)->setWidth(20);
-			}
+		$this->writeExcelHeader($sheet, $listItemDisplay, $listHeaders);
 
-			if ($listItemDisplay[$colIndex] == "displayName") {
-				$sheet->getColumnDimension($columnLetter)->setWidth(18);
-			}
-
-			if ($listItemDisplay[$colIndex] == "accountName") {
-				$sheet->getColumnDimension($columnLetter)->setWidth(18);
-			}
-
-			if ($listItemDisplay[$colIndex] == "groupAdminFor") {
-				$sheet->getColumnDimension($columnLetter)->setWidth(15);
-			}
-
-			if ($listItemDisplay[$colIndex] == "accountBackend") {
-				$sheet->getColumnDimension($columnLetter)->setWidth(25);
-			}
-
-			if ($listItemDisplay[$colIndex] == "quota") {
-				$sheet->getColumnDimension($columnLetter)->setWidth(18);
-			}
-		}
 		$offset = 0;
 		$list_users_result = [];
 
@@ -178,74 +152,7 @@ class GroupApiController extends AUserExportData
 				if ($userData !== null) {
 					$listUserDetail[$userId] = $userData;
 
-					foreach ($listItemDisplay as $colIndex => $columnKey) {
-						$columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
-
-						if ($columnKey == "no") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $rowExcelIndex - 1);
-						}
-
-						if ($columnKey == "displayName") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['displayname']);
-						}
-
-						if ($columnKey == "accountName") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['id']);
-						}
-
-						if ($columnKey == "password") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, "");
-						}
-
-						if ($columnKey == "email") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['email']);
-						}
-
-						if ($columnKey == "groups") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, join(", ", $userData['groups']));
-						}
-
-						if ($columnKey == "groupAdminFor") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, join(", ", $userData['subadmin']));
-						}
-
-						if ($columnKey == "quota") {
-							$used = $userData['quota']['used'] . "B";
-
-							if ($userData['quota']['quota'] == "none") {
-								$quota = "Unlimited";
-							} else {
-								$quota = intdiv((int)$userData['quota']['total'], (1024 * 1024 * 1024))  . "GB";
-							}
-
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $quota . "(" . $used . ")");
-						}
-
-						if ($columnKey == "manager") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['manager']);
-						}
-
-						if ($columnKey == "language") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['language']);
-						}
-
-						if ($columnKey == "accountBackend") {
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $userData['backend'] . "\n" . $userData['storageLocation']);
-						}
-
-						if ($columnKey == "lastLogin") {
-							if ((int)$userData['lastLogin'] > 0) {
-								$timestamp = intdiv((int)$userData['lastLogin'], 1000);
-								$datetimeFormat = 'Y-m-d H:i:s';
-								$date = new \DateTime();
-								$date->setTimestamp($timestamp);
-								$lastLogin = $date->format($datetimeFormat) . " UTC";
-							} else {
-								$lastLogin = "";
-							}
-							$sheet->setCellValue($columnLetter . $rowExcelIndex, $lastLogin);
-						}
-					}
+					$this->writeRowData($sheet, $userData, $listItemDisplay, $rowExcelIndex);
 
 					$rowExcelIndex += 1;
 				} else {
@@ -265,7 +172,7 @@ class GroupApiController extends AUserExportData
 		$now = new \DateTime();
 
 		header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-		header('Content-Disposition: attachment; filename=export_group_acounts' . $now->format($datetimeFormat) . '.xlsx');
+		header('Content-Disposition: attachment; filename="export_group_acounts' . $now->format($datetimeFormat) . '.xlsx"');
 		header('Content-Length: ' . filesize($tempFile));
 		readfile($tempFile);
 		// return new DataResponse(

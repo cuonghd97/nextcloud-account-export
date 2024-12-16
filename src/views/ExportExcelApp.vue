@@ -33,6 +33,8 @@ export default {
 			];
 		});
 	},
+	beforeMount() {
+	},
 	data() {
 		return {
 			isDownloading: false,
