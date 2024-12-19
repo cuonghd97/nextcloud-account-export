@@ -1,8 +1,8 @@
 /.idea/
 /*.iml
 
-/vendor/
-/vendor-bin/*/vendor/
+# /vendor/
+# /vendor-bin/*/vendor/
 
 /.php-cs-fixer.cache
 /tests/.phpunit.cache
